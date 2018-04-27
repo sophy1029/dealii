@@ -1,115 +1,44 @@
 <br>
 
 <i>
-This program was contributed by Martin Kronbichler and Scott Miller.
+This program was contributed by Zhuoran Wang.
 </i>
 
 <a name="Intro"></a>
 <h1>Introduction</h1>
 
-This tutorial program presents the implementation of a hybridizable
-discontinuous Galkerin method for the convection-diffusion equation.
+This tutorial program presents the implementation of a weak Galkerin 
+finite element method for the Poisson equation.
 
-<h3>  Hybridizable discontinuous Galerkin methods</h3>
+<h3>  Weak Galerkin finite element methods</h3>
 
-One common argument against the use of discontinuous Galerkin elements
-is the large number of globally coupled degrees of freedom that one
-must solve in an implicit system.  This is because, unlike continuous finite
-elements, in typical discontinuous elements there is one degree of freedom at
-each vertex <i>for each of the adjacent elements</i>, rather than just one,
-and similarly for edges and faces.  As an example of how fast the number of
-unknowns grows,
-consider the <code>FE_DGP_Monomial</code> basis:  each
-scalar solution component is represented by polynomials of degree $p$
-with $(1/dim!)*\prod_{i=1}^{dim}(p+i)$ degrees of freedom per
-element. Typically, all degrees of freedom in an element are coupled
-to all of the degrees of freedom in the adjacent elements.  The resulting
-discrete equations yield very large linear systems very quickly, especially
-for systems of equations in 2 or 3 dimensions.
+Weak Galerkin Finite Element Methods (WGFEMs) use discrete weak functions 
+to approximate scalar unknowns and discrete weak gradients to 
+approximate classical gradients. 
+It was introduced by Junping Wang and Xiu Ye 
+in the paper: <i>A weak Galerkin finite element method for second order elliptic problems</i>, 
+J. Comput. Appl. Math., 2013, 103-115. 
+Compared to continuous Galerkin method, 
+weak Galerkin method satisfies important physical properties, 
+local mass conservation and bulk normal flux continuity. 
+It results in a SPD linear system. And expected convergence rates can 
+be obtained with mesh refinement.
 
-<h4> Reducing the size of the linear system </h4>
-To alleviate the computational cost of solving such large linear systems,
-the hybridizable discontinuous Galerkin (HDG) methodology was introduced
-by Cockburn and co-workers
-(see the references in the recent HDG overview article by
- N.C. Nguyen and J. Peraire:
-   <i>Hybridizable discontinuous Galerkin methods for partial differential
-   equations in continuum mechanics</i>, Journal of Computational Physics,
-   2012, 231:18, 5955-5988.
-   <a href="http://dx.doi.org/10.1016/j.jcp.2012.02.033">[DOI]</a>).
-The HDG method achieves
-this goal by formulating the mathematical problem using Dirichlet-to-Neumann
-mappings.  The partial differential equations are first written as a first
-order system, and each field is then discretized via a DG method.  At this
-point the  single-valued "trace" values on the skeleton of the
-mesh, i.e. element faces, are taken to be independent unknown quantities.
-The Dirichlet-to-Neumann map concept then permits the following solution procedure:
-<ol>
-  <li>  Use local element interior data to enforce a Neumann condition on the
-skeleton of the triangulation.  The global problem is then to solve for the
-trace values, which are the only globally coupled unknowns.
-  <li>  Use the known skeleton values as Dirichlet data for solving local
-element-level solutions.  This is known as the
-'local solver', and is an <i>embarrassingly parallel</i> element-by-element
-solution process.
-</ol>
-
-The above procedure also has a linear algebra interpretation and is referred to
-as static condensation. Let us write the complete linear system associated to
-the HDG problem as a block system with the discrete DG variables $U$ as
-first block and the skeleton variables $\Lambda$ as the second block:
-@f{eqnarray*}
-\begin{pmatrix} A & B \\ C & D \end{pmatrix}
-\begin{pmatrix} U \\ \Lambda \end{pmatrix}
-=
-\begin{pmatrix} F \\ G \end{pmatrix}.
-@f}
-Our aim is now to eliminate the $U$ block with a Schur complement
-approach similar to step-20, which results in the following two steps:
-@f{eqnarray*}
-(D - C A^{-1} B) \Lambda &=& G - C A^{-1} F, \\
-A U &=& F - B \Lambda.
-@f}
-The point is that the presence of $A^{-1}$ is not a problem because $A$ is a
-block diagonal matrix where each block corresponds to one cell and is
-therefore easy enough to invert.
-The coupling to other cells is introduced by the matrices
-$B$ and $C$ over the skeleton variable. The block-diagonality of
-$A$ and the structure in $B$ and $C$ allow us to invert the
-matrix $A$ element by element (the local solution of the Dirichlet
-problem) and subtract $CA^{-1}B$ from $D$. The steps in the Dirichlet-to-Neumann map concept hence correspond to
-<ol>
-  <li> constructing the Schur complement matrix $D-C A^{-1} B$ and right hand side $G - C A^{-1} F$  <i>locally on each cell</i>
-  and inserting the contribution into the global trace matrix in the usual way,
-  <li> solving the Schur complement system for $\Lambda$, and
-  <li> solving for $U$ using the second equation, given $\Lambda$.
-</ol>
+There are two spaces of discrete weak functions on each element, 
+one part is defined in the interior, and another part is defined on faces. 
+The discrete weak gradients are defined on the Raviart-Thomas space. 
 
 
-<h4> Solution quality and rates of convergence</h4>
-Another criticism of traditional DG methods is that the approximate fluxes
-converge suboptimally.  The local HDG solutions can be shown to converge
-as $\mathcal{O}(h^{p+1})$, i.e., at optimal order.  Additionally, a
-super-convergence property can be used to post-process a new approximate
-solution that converges at the rate $\mathcal{O}(h^{p+2})$.
+<h3> WGFEM applied to the Poisson equation </h3>
+This program is to solve the Darcy equation 
+by the weak Galerkin finite element method. 
+There are three spaces, polynomials defined in the cell interior, 
+polynomials on the faces, and the Raviart-Thomas space. 
+We use notation $WG(Q_k,Q_k;RT_{[k]})$ to represent 
+the combination of spaces, where $k$ is the order of spaces. 
+With the mesh refinement, the solutions converge at rate $\left( k+1 \right).$
 
-
-
-<h3> HDG applied to the convection-diffusion problem </h3>
-
-The HDG formulation used for this example is taken from
-<br>
-<b>
-  N.C. Nguyen, J. Peraire, B. Cockburn:
-  <i>An implicit high-order hybridizable discontinuous Galerkin method
-  for linear convection–diffusion equations</i>,
-  Journal of Computational Physics, 2009, 228:9, 3232-3254.
-  <a href="http://dx.doi.org/10.1016/j.jcp.2009.01.030">[DOI]</a>
-</b>
-
-We consider the convection-diffusion equation over the domain $\Omega$
-with Dirichlet boundary $\partial \Omega_D$ and Neumann boundary
-$\partial \Omega_N$:
+The equation is formulated as
 @f{eqnarray*}
 	\nabla \cdot (\mathbf{c} u) - \nabla \cdot (\kappa \nabla u) &=& f,
 	\quad \text{ in } \Omega, \\
@@ -121,230 +50,216 @@ $\partial \Omega_N$:
 Introduce the auxiliary variable $\mathbf{q}=-\kappa \nabla u$ and rewrite
 the above equation as the first order system:
 @f{eqnarray*}
-  \mathbf{q} + \kappa \nabla u &=& 0, \quad \text{ in } \Omega, \\
-  \nabla \cdot (\mathbf{c} u + \mathbf{q}) &=& f, \quad \text{ in } \Omega, \\
-  u &=& g_D, \quad \text{ on } \partial \Omega_D, \\
-  (\mathbf{q} + \mathbf{c}u)\cdot\mathbf{n}  &=& g_N,
-	\quad \text{ on }  \partial \Omega_N.
+  nabla \cdot \left( -\mathbf{K} \nabla p \right)
+    \equiv \nabla \cdot \mathbf{u} = f,
+    \quad \mathbf{x} \in \Omega, \\
+  p =  p_D,\quad \mathbf{x} \in \Gamma^D, \\
+  \mathbf{u} \cdot \mathbf{n} = u_N,
+  \quad \mathbf{x} \in \Gamma^N, 
 @f}
+where $\Omega \subset \mathbb{R}^n (n=2,3)$ is a bounded domain. 
+In the context of the flow of a fluid through a porous medium, 
+$p$ is the pressure, $\mathbf{K}$ is a permeability tensor, 
+$\mathbf{u} = -\mathbf{K} \nabla p$ is the Darcy velocity, 
+$ f $ is the source term, 
+$ p_D, u_N $ are respectively Dirichlet and Neumann boundary condition.
 
-We multiply these equations by the weight functions $\mathbf{v}, w$
-and integrate by parts over every element $K$ to obtain:
-@f{eqnarray*}
-  (\mathbf{v}, \kappa^{-1} \mathbf{q})_K - (\nabla\cdot\mathbf{v}, u)_K
-    + \left<\mathbf{v}\cdot\mathbf{n}, {\hat{u}}\right>_{\partial K} &=& 0, \\
-  - (\nabla w, \mathbf{c} u + \mathbf{q})_K
-    + \left<w, (\widehat{\mathbf{c} u}+{\hat{\mathbf{q}}})\cdot\mathbf{n}\right>_{\partial K}
-    &=& (w,f)_K.
+In this program, we will test exact pressure 
+$p = \sin \left( \pi x)\sin(\pi y \right)$ on the unit square domain,
+with homogenous Dirichelet boundary conditions and identity matrix $\mathbf{K}$.
+Then we will calculate $L_2$ errors of pressure, velocity and flux.
+
+
+<h3> Weak Galerkin scheme </h3>
+
+Via integration by parts, the weak Galerkin scheme for the Piosson equation is
+f{equation*}
+\mathcal{A}_h\left(p_h,q \right) = \mathcal{F} \left(q \right),
 @f}
-
-The terms decorated with a hat denote the numerical traces (also commonly referred
-to as numerical fluxes).  They are approximations
-to the interior values on the boundary of the element.  To ensure conservation,
-these terms must be single-valued on any given element edge $\partial K$ even
-though, with discontinuous shape functions, there may of course be multiple
-values coming from the cells adjacent to an interface.
-We eliminate the numerical trace $\hat{\mathbf{q}}$ by using traces of the form:
-@f{eqnarray*}
-  \widehat{\mathbf{c} u}+\hat{\mathbf{q}} = \mathbf{c}\hat{u} + \mathbf{q}
-  + \tau(u - \hat{u})\mathbf{n} \quad \text{ on } \partial K.
-@f}
-
-The variable $\hat {u}$ is introduced as an additional independent variable
-and is the one for which we finally set up a globally coupled linear
-system. As mentioned above, it is defined on the element faces and
-discontinuous from one face to another wherever faces meet (at
-vertices in 2d, and at edges and vertices in 3d).
-Values for $u$ and $\mathbf{q}$ appearing in the numerical trace function
-are taken to be the cell's interior solution restricted
-to the boundary $\partial K$.
-
-The local stabilization parameter $\tau$ has effects on stability and accuracy
-of HDG solutions; see the literature for a further discussion. A stabilization
-parameter of unity is reported to be the choice which gives best results. A
-stabilization parameter $\tau$ that tends to infinity prohibits jumps in the
-solution over the element boundaries, making the HDG solution approach the
-approximation with continuous finite elements. In the program below, we choose
-the stabilization parameter as
-@f{eqnarray*}
-  \tau = \frac{\kappa}{\ell} + |\mathbf{c} \cdot \mathbf{n}|
-@f}
-where we set the diffusion $\kappa=1$ and the diffusion length scale to
-$\ell = \frac{1}{5}$.
-
-The trace/skeleton variables in HDG methods are single-valued on element
-faces.  As such, they must strongly represent the Dirichlet data on
-$\partial\Omega_D$.  This means that
+where
 @f{equation*}
-  \hat{u}|_{\partial \Omega_D} = g_D,
+\mathcal{A}_h\left(p_h,q\right)
+  := \sum_{E \in \mathcal{E}_h}
+    \int_E \mathbf{K} \nabla_{w,d} p_h \cdot \nabla_{w,d} q,
 @f}
-where the equal sign actually means an $L_2$ projection of the boundary
-function $g$ onto the space of the face variables (e.g. linear functions on
-the faces). This constraint is then applied to the skeleton variable $\hat{u}$
-using inhomogeneous constraints by the method
-VectorTools::project_boundary_values.
+and 
+@f{equation*}
+\mathcal{F}\left(q\right)
+  := \sum_{E \in \mathcal{E}_h} \int_E f \, q^\circ
+  - \sum_{\gamma \in \Gamma_h^N} \int_\gamma u_N q^\partial,
+@f}
+$q^\circ$ is the shape function of the polynomial space in the interior, 
+$q^\partial$ is the shape function of the polynomial space on faces. 
+We use FE_DGQ as the interior polynomial space, 
+FE_FaceQ as the face polynomial space. 
+For the numerical velocity $\mathbf{u} = -{\mathbf{K}} \nabla_{w,d} p$, 
+it is defined on the vector space, Raviart-Thomas spaces $RT(k)$.
 
-Summing the elemental
-contributions across all elements in the triangulation, enforcing the normal
-component of the numerical flux, and integrating by parts
-on the equation weighted by $w$, we arrive at the final form of the problem:
-Find $(\mathbf{q}_h, u_h, \hat{u}_h) \in
-\mathcal{V}_h^p \times \mathcal{W}_h^p \times \mathcal{M}_h^p$ such that
-@f{align*}
-  (\mathbf{v}, \kappa^{-1} \mathbf{q}_h)_{\mathcal{T}}
-    - ( \nabla\cdot\mathbf{v}, u_h)_{\mathcal{T}}
-    + \left<\mathbf{v}\cdot\mathbf{n}, \hat{u}_h\right>_{\partial\mathcal{T}}
-    &= 0,
-    \quad &&\forall \mathbf{v} \in \mathcal{V}_h^p,
-\\
-   - (\nabla w, \mathbf{c} u_h)_{\mathcal{T}}
-   + (w, \nabla \cdot \mathbf{q}_h)_{\mathcal{T}}
-   + (w, (\mathbf{c}\cdot\mathbf{n}) \hat{u}_h)_{\partial \mathcal{T}}
-    + \left<w, \tau (u_h - \hat{u}_h)\right>_{\partial \mathcal{T}}
-    &=
-    (w, f)_{\mathcal{T}},
-    \quad &&\forall w \in \mathcal{W}_h^p,
-\\
-  \left< \mu, \hat{u}_h\mathbf{c} \cdot \mathbf{n}
-  		+ \mathbf{q}_h\cdot \mathbf{n}
-  	    + \tau (u_h - \hat{u}_h)\right>_{\partial \mathcal{T}}
-    &=
-    \left<\mu, g_N\right>_{\partial\Omega_N},
-    \quad &&\forall \mu \in \mathcal{M}_h^p.
+<h3> Assembling the linear system </h3>
+
+First, we solve for the pressure. 
+We collect two local spaces together in one FESystem, 
+the first component in this finite element system denotes 
+the space for interior pressure, and the second denotes 
+the space for face pressure. 
+For the interior component, we use the polynomial space FE_DGQ. 
+For the face component, we use FE_FaceQ.
+
+We use shape functions defined on spaces FE_DGQ and FE_FaceQ to 
+approximate pressures, i.e., $p_h = \sum a_i \phi_i,$ 
+where $\phi_i$ are shape functions of FESystem. 
+We construct the local system by using discrete weak gradients of 
+shape functions of FE_DGQ and FE_FaceQ.
+The discrete weak gradients of shape functions of 
+FESystem $\nabla_{w,d} \phi$ are defined as 
+$\nabla_{w,d} \phi = \sum_{i=1}^m c_i \mathbf{w}_i,$ 
+where $\mathbf{w}_i$ is the basis function of $RT(k)$, 
+$m$ is the dof of the $RT(k)$. 
+
+Through integration by parts, we have a small linear system 
+on each element $E$,
+@f{equation*}
+\int_{E} \left(\nabla_{w,d} \phi \right) \cdot \mathbf{w} = 
+\int_{E^\partial} \phi^{\partial} \left(\mathbf{w} \cdot \mathbf{n}\right) - 
+\int_{E^\circ} \phi^{\circ} \left(\nabla \cdot \mathbf{w}\right),  
+\quad \forall \mathbf{w} \in RT_{[k]}(E),
 @f}
 
-The unknowns $(\mathbf{q}_h, u_h)$ are referred to as local variables; they are
-represented as standard DG variables.  The unknown $\hat{u}_h$ is the skeleton
-variable which has support on the codimension-1 surfaces (faces) of the mesh.
+@f{equation*}
+\sum_{i=1}^m c_i \int_E \mathbf{w}_i \cdot \mathbf{w}_j = 
+\int_{E^{\partial}} \phi_i^{\partial} 
+\left(\mathbf{w}_j \cdot \mathbf{n} \right) - 
+\int_{E^{\circ}} \phi_i^{\circ} \left (\nabla \cdot \mathbf{w}_j \right),
+@f}
+which is simplified to be
+@f{equation*}
+\mathbf{C}_{E}\mathbf{M}_{E} = \mathbf{F}_{E},
+@f}
+where $\mathbf{C}_E$ is the matrix with unknown coefficients $c$, 
+$\mathbf{M}_E$ is the Gram matrix 
+$\left[  \int_E \mathbf{w}_i \cdot \mathbf{w}_j \right]$, 
+$\mathbf{F}_E$ is the matrix of right hand side, 
+$\mathbf{w}$ and $\phi_i^{\circ}$ are in FEValues, 
+$\phi_i^{\partial}$ is in FEFaceValues. 
+Then we solve for $\mathbf{C}_E = \mathbf{F}_E \mathbf{M}_E^{-1}$. 
+Now, discrete weak gradients of shape functions are written as 
+linear combinations of basis functions of the $RT$ space. 
+In our code, we name $\mathbf{C}_E$ as \textit{cell\_matrix\_C}, 
+$\mathbf{M}_E$ as <code>cell_matrix_rt</code>, 
+$\mathbf{F}_E$ as <code>cell_matrix_F</code>.
 
-We use the notation $(\cdot, \cdot)_{\mathcal{T}} = \sum_K (\cdot, \cdot)_K$
-to denote the sum of integrals over all cells and $\left<\cdot,
-\cdot\right>_{\partial \mathcal{T}} = \sum_K \left<\cdot,
-\cdot\right>_{\partial K}$ to denote integration over all faces of all cells,
-i.e., interior faces are visited twice, once from each side and with
-the corresponding normal vectors. When combining the contribution from
-both elements sharing a face, the above equation yields terms familiar
-from the DG method, with jumps of the solution over the cell boundaries.
+On the local matrix $\mathbf{A}$ of the element, each component is 
+@f{equation*}
+\mathbf{A}_{ij} = 
+\int_{E} \mathbf{K} \nabla_{w,d} \phi_i \cdot \nabla_{w,d} \phi_j,
+@f}
+combining the coefficients we have calculated previous, it is calculated as
+@f{equation*}
+\int_E \mathbf{K} \sum_{k,l = 1}^{m}c_{ik} c_{jl} \left(\mathbf{w}_i \cdot \mathbf{w}_j\right)
+= \sum_{k,l = 1}^{m}c_{ik} c_{jl} \int_{E} \mathbf{K} \left(\mathbf{w}_i \cdot \mathbf{w}_j \right).
+@f}
 
-In the equation above, the space $\mathcal {W}_h^{p}$ for the scalar variable
-$u_h$ is defined as the space of functions that are tensor
-product polynomials of degree $p$ on each cell and discontinuous over the
-element boundaries $\mathcal Q_{-p}$, i.e., the space described by
-<code>FE_DGQ<dim>(p)</code>. The space for the gradient or flux variable
-$\mathbf{q}_i$ is a vector element space where each component is
-a locally polynomial and discontinuous $\mathcal Q_{-p}$. In the code below,
-we collect these two local parts together in one FESystem where the first @p
-dim components denote the gradient part and the last scalar component
-corresponds to the scalar variable. For the skeleton component $\hat{u}_h$, we
-define a space that consists of discontinuous tensor product polynomials that
-live on the element faces, which in deal.II is implemented by the class
-FE_FaceQ. This space is otherwise similar to FE_DGQ, i.e., the solution
-function is not continuous between two neighboring faces, see also the results
-section below for an illustration.
+Next, we use function ConstraintMatrix::distribute_local_to_global to 
+distribute components in local matrices $\mathbf{A}$ to the system matrix. 
 
-In the weak form given above, we can note the following coupling patterns:
-<ol>
-  <li> The matrix $A$ consists of local-local coupling terms.  These arise when the
-  local weighting functions $(\mathbf{v}, w)$ multiply the local solution terms
-  $(\mathbf{q}_h, u_h)$. Because the elements are discontinuous, $A$
-  is block diagonal.
-  <li> The matrix $B$ represents the local-face coupling.  These are the terms
-  with weighting functions $(\mathbf{v}, w)$ multiplying the skeleton variable
-  $\hat{u}_h$.
-  <li> The matrix $C$ represents the face-local coupling, which involves the
-  weighting function $\mu$ multiplying the local solutions $(\mathbf{q}_h, u_h)$.
-  <li>  The matrix $D$ is the face-face coupling;
-  terms involve both $\mu$ and $\hat{u}_h$.
-</ol>
+In the scheme 
+$\mathcal{A}_h\left(p_h,q \right) = \mathcal{F} \left( q \right),$ 
+we have system matrix and system right hand side, 
+we can solve for the coefficients of the system matrix. 
+Results are pressure values in interiors and on faces.
 
-<h4> Post-processing and super-convergence </h4>
+<h3> Post-processing and $L_2$-errors </h3>
 
-One special feature of the HDG methods is that they typically allow for
-constructing an enriched solution that gains accuracy. This post-processing
-takes the HDG solution in an element-by-element fashion and combines it such
-that one can get $\mathcal O(h^{p+2})$ order of accuracy when using
-polynomials of degree $p$. For this to happen, there are two necessary
-ingredients:
-<ol>
-  <li> The computed solution gradient $\mathbf{q}_h$ converges at optimal rate,
-   i.e., $\mathcal{O}(h^{p+1})$.
-  <li> The average of the scalar part of the solution, <i>u<sub>h</sub></i>,
-   on each cell $K$ super-converges at rate $\mathcal{O}(h^{p+2})$.
-</ol>
+After we have calculated the numerical pressure $p$, 
+we use discrete weak gradients of $p$ to calculate the velocity on each element.
 
-We now introduce a new variable $u_h^* \in \mathcal{V}_h^{p+1}$, which we find
-by minimizing the expression $|\kappa \nabla u_h^* + \mathbf{q}_h|^2$ over the cell
-$K$ under the constraint $\left(1, u_h^*\right)_K = \left(1,
-u_h\right)_K$. The constraint is necessary because the minimization
-functional does not determine the constant part of $u_h^*$. This
-translates to the following system of equations:
+On each element, numerical pressure $p_h = \sum a_i\phi_i,$ $\nabla p$ can be
+approximated by discrete weak gradients  $ \nabla_{w,d}\phi_i$, so
+@f{equation*}
+\nabla_{w,d} p_h = \sum_{i} a_i \nabla_{w,d}\phi_i.
+@f}
+
+The numerical velocity $ \mathbf{u_h} = -\mathbf{K} \nabla_{w,d}p_h$ and
+@f{equation*}
+\mathbf{u}_h = -\mathbf{K} \nabla_{w,d} p = 
+-\sum_{i} \sum_{j} a_ic_{ij}\mathbf{K}\mathbf{w}_j,
+@f}
+where $c_{ij}$ is the coefficient of Gram matrix, 
+$\mathbf{w}_j$ is the basis function of the $RT$ space. 
+But when it is multiplied by matrix $\mathbf{K}$, 
+$\mathbf{K} \mathbf{w}_j$ may not still be in the $RT$ space. 
+So we need $L_2$-projection to project it back to the $RT$ space. 
+
+We define the projection as 
+$ \mathbf{Q}_h \left( \mathbf{K}\mathbf{w}_j \right) = 
+\sum_{k} d_{jk}\mathbf{w}_k$. 
+For any $j$, 
+$\left( \mathbf{Q}_h \left( \mathbf{Kw}_j \right),\mathbf{w}_k \right)_E = 
+\left( \mathbf{Kw}_j,\mathbf{w}_k \right)_E.$ 
+So numerical velocity becomes
+@f{equation*}
+\mathbf{u_h} = \mathbf{Q}_h \left( -\mathbf{K}\nabla_{w,d}p_h \right) = 
+-\sum_{i=0}^{4} \sum_{j=1}^{4}a_ib_{ij}\mathbf{Q}_h \left( \mathbf{K}\mathbf{w}_j \right),
+@f}
+and we have the following system to solve for the coefficients $d_{jk}$,
+@f{equation*}
+ \left[
+  \begin{matrix}
+  \left(\mathbf{w}_i,\mathbf{w}_j \right) 
+  \end{matrix}
+  \right]
+  \left[
+   \begin{matrix}
+   d_{jk}
+   \end{matrix}
+   \right]
+   =
+   \left[
+    \begin{matrix}
+    \left( \mathbf{Kw}_j,\mathbf{w}_k \right)
+    \end{matrix}
+    \right].
+@f}
+$
+ \left[
+   \begin{matrix}
+   d_{jk}
+   \end{matrix}
+   \right]
+$
+is named as <code>cell_matrix_D</code>, 
+$
+\left[
+    \begin{matrix}
+     \left( \mathbf{Kw}_j,\mathbf{w}_k \right)
+    \end{matrix}
+    \right]
+$
+is named as <code>cell_matrix_E</code>.
+
+Then the elementwise velocity is
+@f{equation*}
+\mathbf{u}_h = -\sum_{i} \sum_{j}a_ic_{ij}\sum_{k}d_{jk}\mathbf{w}_k = 
+\sum_{k}- \left(\sum_{j} \sum_{i} a_ic_{ij}d_{jk} \right)\mathbf{w}_k,
+@f}
+where $-\sum_{j} \sum_{i} a_ic_{ij}d_{jk}$ is named as 
+<code>beta</code> in the code.
+
+We calculate the $L_2$-errors of pressure, velocity and flux 
+by the following formulas,
 @f{eqnarray*}
-\left(1, u_h^*\right)_K &=& \left(1, u_h\right)_K\\
-\left(\nabla w_h^*, \kappa \nabla u_h^*\right)_K &=&
--\left(\nabla w_h^*, \mathbf{q}_h\right)_K
-\quad \text{for all } w_h^* \in \mathcal Q^{p+1}.
+\|p-p_h^\circ\|^2
+  = \sum_{E \in \mathcal{E}_h} \|p-p_h^\circ\|_{L^2(E)}^2, \\
+ \|\mathbf{u}-\mathbf{u}_h\|^2
+  = \sum_{E \in \mathcal{E}_h} \|\mathbf{u}-\mathbf{u}_h\|_{L^2(E)^2}^2,\\
+\|(\mathbf{u}-\mathbf{u}_h) \cdot \mathbf{n}\|^2
+  = \sum_{E \in \mathcal{E}_h} \sum_{\gamma \subset E^\partial}
+    \frac{|E|}{|\gamma|} \|\mathbf{u} \cdot \mathbf{n} - \mathbf{u}_h \cdot \mathbf{n}\|_{L^2(\gamma)}^2,
 @f}
+where $| E |$ is the area of the element, 
+$\gamma$ are faces of the element, 
+$\mathbf{n}$ are unit normal vectors of each face.
 
-Since we test by the whole set of basis functions in the space of tensor
-product polynomials of degree $p+1$ in the second set of equations, this
-is an overdetermined system with one more equation than unknowns. We fix this
-in the code below by omitting one of these equations (since the rows in the
-Laplacian are linearly dependent when representing a constant function). As we
-will see below, this form of the post-processing gives the desired
-super-convergence result with rate $\mathcal {O}(h^{p+2})$.  It should be
-noted that there is some freedom in constructing $u_h^*$ and this minimization
-approach to extract the information from the gradient is not the only one. In
-particular, the post-processed solution defined here does not satisfy the
-convection-diffusion equation in any sense. As an alternative, the paper by
-Nguyen, Peraire and Cockburn cited above suggests another somewhat more
-involved formula for convection-diffusion that can also post-process the flux
-variable into an $H(\Omega,\mathrm{div})$-conforming variant and better
-represents the local convection-diffusion operator when the diffusion is
-small. We leave the implementation of a more sophisticated post-processing as
-a possible extension to the interested reader.
-
-Note that for vector-valued problems, the post-processing works similarly. One
-simply sets the constraint for the mean value of each vector component
-separately and uses the gradient as the main source of information.
-
-<h3> Problem specific data </h3>
-
-For this tutorial program, we consider almost the same test case as in
-step-7. The computational domain is $\Omega := [-1,1]^d$ and the exact
-solution corresponds to the one in step-7, except for a scaling. We use the
-following source centers $x_i$ for the exponentials
-<ul>
-  <li> 1D:  $\{x_i\}^1 = \{ -\frac{1}{3}, 0, \frac{1}{3} \}$,
-  <li> 2D: $\{\mathbf{x}_i\}^2 = \{ (-\frac{1}{2},\frac{1}{2}),
-                        		 (-\frac{1}{2},-\frac{1}{2}),
-  					 (\frac{1}{2},-\frac{1}{2})
-  				   \}$,
-  <li> 3D: $\{\mathbf{x}_i\}^3 = \{ (-\frac{1}{2},\frac{1}{2}, \frac{1}{4}),
-  				      (-\frac{3}{5},-\frac{1}{2}, -\frac{1}{8}),
-  				      (\frac{1}{2},-\frac{1}{2}, \frac{1}{2})
-  				   \}$.
-</ul>
-
-With the exact solution given, we then choose the forcing on the right hand
-side and the Neumann boundary condition such that we obtain this solution
-(manufactured solution technique). In this example, we choose the diffusion
-equal to one and the convection as
-\f[
-\mathbf{c} = \begin{cases}
-1, & \textrm{dim}=1 \\
-(y, -x), & \textrm{dim}=2 \\
-(y, -x, 1), & \textrm{dim}=3
-\end{cases}
-\f]
-Note that the convection is divergence-free, $\nabla \cdot c = 0$.
-
-<h3> Implementation </h3>
-
-Besides implementing the above equations, the implementation below provides the following features:
-<ul>
-  <li> WorkStream to parallelize local solvers. Workstream has been presented
-  in detail in step-9.
-  <li> Reconstruct the local DG solution from the trace.
-  <li> Post-processing the solution for superconvergence.
-  <li> DataOutFaces for direct output of the global skeleton solution.
-</ul>
+We will extract interior pressure solutions of each cell 
+from the global solution and calculate the $L_2$ error 
+by using function VectorTools::integrate_difference.
