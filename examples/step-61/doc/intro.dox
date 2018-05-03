@@ -7,8 +7,43 @@ This program was contributed by Zhuoran Wang.
 <a name="Intro"></a>
 <h1>Introduction</h1>
 
-This tutorial program presents the implementation of a weak Galkerin 
-finite element method for the Poisson equation.
+This tutorial program presents an implementation of the "weak Galerkin" 
+finite element method for the Poisson equation. In some sense, the motivation for
+considering this method starts from the same point as in step-51: We would like to
+consider discontinuous shape functions, but then need to address the fact that
+the resulting problem has a large number of degrees of freedom (because, for
+example, each vertex carries as many degrees of freedom as there are adjacent cells).
+We also have to address the fact that, in general, every every degree of freedom
+on one cell couples with all of the degrees of freedom on each of its face neighbor
+cells. Consequently, the matrix one gets from the "traditional" discontinuous
+Galerkin methods are both large and relatively dense.
+
+Both the hybridized discontinuous Galerkin method (HDG) of step-51 and the weak
+Galerkin (WG) method of this tutorial address the issue of coupling by introducing
+additional degrees of freedom whose shape functions only live on a face between
+cells (i.e., on the "skeleton" of the mesh), and which therefore "insulate" the
+degrees of freedom on the adjacent cells from each other: cell degrees of freedom
+only couple with other cell degrees of freedom on the same cell, as well as face
+degrees of freedom, but not with cell degrees of freedom on neighboring cells.
+Consequently, the shape functions for these cell degrees of freedom are
+discontinuous and only "live" on exactly one cell.
+
+For a given equation, say the second order Poisson equation,
+the difference between the HDG and the WG method is how exactly one formulates
+the problem that connects all of these different shape functions. The HDG does
+things by reformulating second order problems in terms of a system of first
+order equations and then conceptually considers the face degrees of freedom
+as "fluxes" of this first order system. In contrast, the WG method keeps things
+in second order form and considers the face degrees of freedom as of the same
+type as the primary solution variable, just restricted to the lower-dimensional
+faces. For the purposes of the equation, one then needs to somehow "extend"
+these shape functions into the interior of the cell when defining what it means
+to apply a differential operator to them. Compared to the HDG, the method
+has the advantage that it does not lead to a proliferation of unknowns due
+to rewriting the equation as a first-order system, but it is also not quite
+as easy to implement. However, as we will see in the following, this
+additional effort is not prohibitive.
+ 
 
 <h3>  Weak Galerkin finite element methods</h3>
 
@@ -19,61 +54,42 @@ It was introduced by Junping Wang and Xiu Ye
 in the paper: <i>A weak Galerkin finite element method for second order elliptic problems</i>, 
 J. Comput. Appl. Math., 2013, 103-115. 
 Compared to continuous Galerkin method, 
-weak Galerkin method satisfies important physical properties, 
+weak Galerkin method satisfies important physical properties, namely 
 local mass conservation and bulk normal flux continuity. 
-It results in a SPD linear system. And expected convergence rates can 
+It results in a SPD linear system, and expected convergence rates can 
 be obtained with mesh refinement.
-
-There are two spaces of discrete weak functions on each element, 
-one part is defined in the interior, and another part is defined on faces. 
-The discrete weak gradients are defined on the Raviart-Thomas space. 
 
 
 <h3> WGFEM applied to the Poisson equation </h3>
-This program is to solve the Darcy equation 
-by the weak Galerkin finite element method. 
-There are three spaces, polynomials defined in the cell interior, 
-polynomials on the faces, and the Raviart-Thomas space. 
-We use notation $WG(Q_k,Q_k;RT_{[k]})$ to represent 
-the combination of spaces, where $k$ is the order of spaces. 
-With the mesh refinement, the solutions converge at rate $\left( k+1 \right).$
-
-The equation is formulated as
+This program is to solve the Poisson equation 
+by the weak Galerkin finite element method:
 @f{eqnarray*}
-	\nabla \cdot (\mathbf{c} u) - \nabla \cdot (\kappa \nabla u) &=& f,
-	\quad \text{ in } \Omega, \\
-	u &=& g_D, \quad \text{ on } \partial \Omega_D, \\
-	(\mathbf{c} u - \kappa \nabla u)\cdot \mathbf{n} &=& g_N,
-	\quad \text{ on }  \partial \Omega_N.
-@f}
-
-Introduce the auxiliary variable $\mathbf{q}=-\kappa \nabla u$ and rewrite
-the above equation as the first order system:
-@f{eqnarray*}
-  nabla \cdot \left( -\mathbf{K} \nabla p \right)
-    \equiv \nabla \cdot \mathbf{u} = f,
+  \nabla \cdot \left( -\mathbf{K} \nabla p \right)
+    = f,
     \quad \mathbf{x} \in \Omega, \\
   p =  p_D,\quad \mathbf{x} \in \Gamma^D, \\
   \mathbf{u} \cdot \mathbf{n} = u_N,
   \quad \mathbf{x} \in \Gamma^N, 
 @f}
 where $\Omega \subset \mathbb{R}^n (n=2,3)$ is a bounded domain. 
-In the context of the flow of a fluid through a porous medium, 
+In the context of the flow of a fluid through a porous medium,
 $p$ is the pressure, $\mathbf{K}$ is a permeability tensor, 
-$\mathbf{u} = -\mathbf{K} \nabla p$ is the Darcy velocity, 
-$ f $ is the source term, 
-$ p_D, u_N $ are respectively Dirichlet and Neumann boundary condition.
+$ f $ is the source term, and
+$ p_D, u_N $ are respectively Dirichlet and Neumann boundary condition
+We can introduce a flux, $\mathbf{u} = -\mathbf{K} \nabla p$, that corresponds 
+to the Darcy velocity (in the way we did in step-20) and this variable will
+be important in the considerations below.
 
-In this program, we will test exact pressure 
-$p = \sin \left( \pi x)\sin(\pi y \right)$ on the unit square domain,
+In this program, we will consider a test case where the exact pressure 
+is $p = \sin \left( \pi x)\sin(\pi y \right)$ on the unit square domain,
 with homogenous Dirichelet boundary conditions and identity matrix $\mathbf{K}$.
 Then we will calculate $L_2$ errors of pressure, velocity and flux.
 
 
 <h3> Weak Galerkin scheme </h3>
 
-Via integration by parts, the weak Galerkin scheme for the Piosson equation is
-f{equation*}
+Via integration by parts, the weak Galerkin scheme for the Poisson equation is
+@f{equation*}
 \mathcal{A}_h\left(p_h,q \right) = \mathcal{F} \left(q \right),
 @f}
 where
